@@ -35,24 +35,19 @@ export class HackService {
       .digest('hex');
   }
 
-  private *generateAllCombinations(alphabet: string) {
-    for (let a = 0; a < alphabet.length; a++) {
-      for (let b = 0; b < alphabet.length; b++) {
-        for (let c = 0; c < alphabet.length; c++) {
-          for (let d = 0; d < alphabet.length; d++) {
-            for (let e = 0; e < alphabet.length; e++) {
-              for (let f = 0; f < alphabet.length; f++) {
-                yield alphabet[a] +
-                  alphabet[b] +
-                  alphabet[c] +
-                  alphabet[d] +
-                  alphabet[e] +
-                  alphabet[f];
-              }
-            }
-          }
-        }
-      }
+  private *generateAllCombinations(
+    alphabet: string,
+    length: number,
+    prefix = '',
+  ) {
+    if (length === 0) {
+      yield prefix;
+      return;
+    }
+
+    for (let i = 0; i < alphabet.length; i++) {
+      const next = prefix + alphabet[i];
+      yield* this.generateAllCombinations(alphabet, length - 1, next);
     }
   }
 
@@ -61,8 +56,9 @@ export class HackService {
     targetHash: string,
   ): Promise<string | null> {
     const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+    const passwordLength = 6;
     let count = 0;
-    const combinations = this.generateAllCombinations(alphabet);
+    const combinations = this.generateAllCombinations(alphabet, passwordLength);
 
     for (const password of combinations) {
       count++;
