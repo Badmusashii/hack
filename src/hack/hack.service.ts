@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { Worker } from 'worker_threads';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import * as crypto from 'crypto';
 
 @Injectable()
 export class HackService {
@@ -15,7 +15,7 @@ export class HackService {
       );
       const { id, salt, hash } = response.data;
 
-      const password = await this.findPassword(salt, hash);
+      const password = await this.findPasswordUsingWorker(salt, hash);
       if (password) {
         console.log(`Password trouvé !: ${password}`);
         this.submitResponse(id, password);
@@ -27,13 +27,13 @@ export class HackService {
     }
   }
 
-  private generateHash(password: string, saltHex: string) {
-    const saltBuffer = Buffer.from(saltHex, 'hex');
-    return crypto
-      .createHash('sha256')
-      .update(Buffer.concat([saltBuffer, Buffer.from(password, 'utf-8')]))
-      .digest('hex');
-  }
+  //   private generateHash(password: string, saltHex: string) {
+  //     const saltBuffer = Buffer.from(saltHex, 'hex');
+  //     return crypto
+  //       .createHash('sha256')
+  //       .update(Buffer.concat([saltBuffer, Buffer.from(password, 'utf-8')]))
+  //       .digest('hex');
+  //   }
 
   private *generateAllCombinations(
     alphabet: string,
@@ -51,27 +51,30 @@ export class HackService {
     }
   }
 
-  public async findPassword(
+  public async findPasswordUsingWorker(
     salt: string,
     targetHash: string,
   ): Promise<string | null> {
-    const alphabet = 'abcdefghijklmnopqrstuvwxyz';
-    const passwordLength = 6;
-    let count = 0;
-    const combinations = this.generateAllCombinations(alphabet, passwordLength);
+    return new Promise((resolve, reject) => {
+      const worker = new Worker('./path/to/hashWorker.js');
+      worker.postMessage({
+        salt,
+        targetHash,
+        alphabet: 'abcdefghijklmnopqrstuvwxyz',
+        length: 6,
+      });
 
-    for (const password of combinations) {
-      count++;
-      if (count % 1000000 === 0) {
-        console.log(`Nombre de combinaisons testées: ${count}`);
-      }
-      const hash = this.generateHash(password, salt);
-      if (hash === targetHash) {
-        console.log(`Password trouvé ! : ${password}`);
-        return password;
-      }
-    }
-    return null;
+      worker.on('message', (password) => {
+        resolve(password);
+      });
+
+      worker.on('error', reject);
+      worker.on('exit', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Worker stopped with exit code ${code}`));
+        }
+      });
+    });
   }
 
   private async submitResponse(challengeId: string, password: string) {
