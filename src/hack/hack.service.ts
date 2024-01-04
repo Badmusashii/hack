@@ -27,53 +27,50 @@ export class HackService {
     }
   }
 
-  //   private generateHash(password: string, saltHex: string) {
-  //     const saltBuffer = Buffer.from(saltHex, 'hex');
-  //     return crypto
-  //       .createHash('sha256')
-  //       .update(Buffer.concat([saltBuffer, Buffer.from(password, 'utf-8')]))
-  //       .digest('hex');
-  //   }
-
-  private *generateAllCombinations(
-    alphabet: string,
-    length: number,
-    prefix = '',
-  ) {
-    if (length === 0) {
-      yield prefix;
-      return;
-    }
-
-    for (let i = 0; i < alphabet.length; i++) {
-      const next = prefix + alphabet[i];
-      yield* this.generateAllCombinations(alphabet, length - 1, next);
-    }
-  }
-
   public async findPasswordUsingWorker(
     salt: string,
     targetHash: string,
   ): Promise<string | null> {
     return new Promise((resolve, reject) => {
-      const worker = new Worker('./path/to/hashWorker.js');
-      worker.postMessage({
-        salt,
-        targetHash,
-        alphabet: 'abcdefghijklmnopqrstuvwxyz',
-        length: 6,
-      });
+      const numWorkers = 4; // Nombre de coeurs du CPU
+      const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+      const passwordLength = 6;
+      const workers: Worker[] = []; // Stockage des références des workers
+      const totalCombinations = Math.pow(alphabet.length, passwordLength);
+      const segmentLength = Math.ceil(totalCombinations / numWorkers);
+      let found = false;
+      for (let i = 0; i < numWorkers; i++) {
+        const start = i * segmentLength;
+        const end =
+          i + 1 === numWorkers ? totalCombinations : start + segmentLength;
 
-      worker.on('message', (password) => {
-        resolve(password);
-      });
+        const worker = new Worker('./dist/hashWorker.js');
+        workers.push(worker); // Stocker la référence du worker
+        worker.postMessage({
+          salt,
+          targetHash,
+          start,
+          end,
+          alphabet,
+          length: passwordLength,
+        });
 
-      worker.on('error', reject);
-      worker.on('exit', (code) => {
-        if (code !== 0) {
-          reject(new Error(`Worker stopped with exit code ${code}`));
-        }
-      });
+        worker.on('message', (password) => {
+          if (!found) {
+            found = true;
+            resolve(password);
+            // Arrêter les autres workers
+            workers.forEach((w) => w !== worker && w.terminate());
+          }
+        });
+
+        worker.on('error', reject);
+        worker.on('exit', (code) => {
+          if (code !== 0 && !found) {
+            reject(new Error(`Worker stopped with exit code ${code}`));
+          }
+        });
+      }
     });
   }
 

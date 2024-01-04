@@ -1,6 +1,6 @@
 // hashWorker.ts
 import { parentPort } from 'worker_threads';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 function generateHash(password: string, saltHex: string): string {
   const saltBuffer = Buffer.from(saltHex, 'hex');
@@ -13,9 +13,6 @@ function generateHash(password: string, saltHex: string): string {
 parentPort.on('message', (data) => {
   const { salt, targetHash, alphabet, length } = data;
 
-  // Ici, vous pouvez implémenter la logique pour générer des combinaisons et vérifier les hashes
-  // Utilisez generateHash dans cette logique
-  // Par exemple :
   for (const password of generateAllCombinations(alphabet, length)) {
     if (generateHash(password, salt) === targetHash) {
       parentPort.postMessage(password);
