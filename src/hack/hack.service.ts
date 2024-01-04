@@ -53,14 +53,15 @@ export class HackService {
           end,
           alphabet,
           length: passwordLength,
+          workerId: i, // Numéro unique du worker
         });
 
-        worker.on('message', (password) => {
+        worker.on('message', (response) => {
           if (!found) {
             found = true;
-            resolve(password);
+            resolve(response.password);
             // Arrêter les autres workers
-            workers.forEach((w) => w !== worker && w.terminate());
+            workers.forEach((w) => w.terminate());
           }
         });
 

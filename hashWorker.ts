@@ -2,6 +2,8 @@
 import { parentPort } from 'worker_threads';
 import * as crypto from 'crypto';
 
+const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+
 function generateHash(password: string, saltHex: string): string {
   const saltBuffer = Buffer.from(saltHex, 'hex');
   return crypto
@@ -10,28 +12,33 @@ function generateHash(password: string, saltHex: string): string {
     .digest('hex');
 }
 
-parentPort.on('message', (data) => {
-  const { salt, targetHash, alphabet, length } = data;
+function indexToCombination(index, alphabetSize, passwordLength) {
+  let combination = '';
+  for (let i = passwordLength - 1; i >= 0; i--) {
+    const charPosition = Math.floor(index / Math.pow(alphabetSize, i));
+    index -= charPosition * Math.pow(alphabetSize, i);
+    combination += alphabet[charPosition];
+  }
+  return combination;
+}
 
-  for (const password of generateAllCombinations(alphabet, length)) {
+parentPort.on('message', (data) => {
+  const { salt, targetHash, start, end, alphabet, length, workerId } = data;
+  let currentIndex = start;
+  while (currentIndex < end) {
+    const password = indexToCombination(currentIndex, alphabet.length, length);
     if (generateHash(password, salt) === targetHash) {
-      parentPort.postMessage(password);
+      parentPort.postMessage({ password, workerId });
       break;
+    }
+
+    currentIndex++;
+    if (currentIndex % 5000000 === 0) {
+      console.log(
+        `Worker ${workerId} - Nombre de combinaisons testées: ${
+          currentIndex - start
+        }`,
+      );
     }
   }
 });
-
-function* generateAllCombinations(
-  alphabet: string,
-  length: number,
-  prefix = '',
-): Generator<string> {
-  if (length === 0) {
-    yield prefix;
-    return;
-  }
-
-  for (let i = 0; i < alphabet.length; i++) {
-    yield* generateAllCombinations(alphabet, length - 1, prefix + alphabet[i]);
-  }
-}
